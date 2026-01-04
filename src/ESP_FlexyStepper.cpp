@@ -97,7 +97,7 @@ bool ESP_FlexyStepper::startAsService(int coreNumber)
   {
     disableCore0WDT(); // we have to disable the Watchdog timer to prevent it from rebooting the ESP all the time another option would be to add a vTaskDelay but it would slow down the stepper
   }
-#if !(CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S2)
+#ifndef CONFIG_FREERTOS_UNICORE
   else if (coreNumber == 1)
   {
     disableCore1WDT(); // we have to disable the Watchdog timer to prevent it from rebooting the ESP all the time another option would be to add a vTaskDelay but it would slow down the stepper
