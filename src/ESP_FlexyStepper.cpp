@@ -45,6 +45,7 @@
 //
 
 #include "ESP_FlexyStepper.h"
+#include <esp_task_wdt.h>
 
 //
 // direction signal level for "step and direction"
@@ -93,21 +94,21 @@ ESP_FlexyStepper::~ESP_FlexyStepper()
 // TODO: use https://github.com/nrwiersma/ESP8266Scheduler/blob/master/examples/simple/simple.ino for ESP8266
 bool ESP_FlexyStepper::startAsService(int coreNumber)
 {
-  if (coreNumber == 0)
-  {
-    disableCore0WDT(); // we have to disable the Watchdog timer to prevent it from rebooting the ESP all the time another option would be to add a vTaskDelay but it would slow down the stepper
-  }
-#ifndef CONFIG_FREERTOS_UNICORE
-  else if (coreNumber == 1)
-  {
-    disableCore1WDT(); // we have to disable the Watchdog timer to prevent it from rebooting the ESP all the time another option would be to add a vTaskDelay but it would slow down the stepper
-  }
-#endif
-  else
-  {
-    // invalid core number given
-    return false;
-  }
+//   if (coreNumber == 0)
+//   {
+//     disableCore0WDT(); // we have to disable the Watchdog timer to prevent it from rebooting the ESP all the time another option would be to add a vTaskDelay but it would slow down the stepper
+//   }
+// #ifndef CONFIG_FREERTOS_UNICORE
+//   else if (coreNumber == 1)
+//   {
+//     disableCore1WDT(); // we have to disable the Watchdog timer to prevent it from rebooting the ESP all the time another option would be to add a vTaskDelay but it would slow down the stepper
+//   }
+// #endif
+//   else
+//   {
+//     // invalid core number given
+//     return false;
+//   }
 
   xTaskCreatePinnedToCore(
       ESP_FlexyStepper::taskRunner, /* Task function. */
@@ -128,8 +129,15 @@ void ESP_FlexyStepper::taskRunner(void *parameter)
   ESP_FlexyStepper *stepperRef = static_cast<ESP_FlexyStepper *>(parameter);
   for (;;)
   {
-    stepperRef->processMovement();
+    bool result = false;
+    do {
+      result = stepperRef->processMovement();
+     Serial.print( result ? "€" : "§");
+    } while(result == false);
     // vTaskDelay(1); // This would be a working solution to prevent the WDT to fire (if not disabled, yet it will cause noticeably less smooth stepper movements / lower frequencies)
+    Serial.print("@");
+    vTaskDelay(100); // yield to other tasks to prevent WDT reset, yet keep smooth stepper movements
+    esp_task_wdt_reset();
   }
 }
 
@@ -602,7 +610,7 @@ float ESP_FlexyStepper::getTargetPositionInMillimeters()
 // speed, but the speed the motor should be moving at the time the function is
 // called.  This is a signed value and is negative when the motor is moving
 // backwards.  Note: This speed will be incorrect if the desired velocity is set
-// faster than this library can generate steps, or if the load on the motor is too
+// faster than this library can generate steps, or if the load on the motor is toos
 // great for the amount of torque that it can generate.
 //  Exit:  velocity speed in steps per second returned, signed
 //
@@ -1126,7 +1134,7 @@ void ESP_FlexyStepper::moveRelativeInSteps(long distanceToMoveInSteps)
     ;
 }
 
-//
+//s
 // setup a move relative to the current position, units are in steps, no motion
 // occurs until processMove() is called
 //  Enter:  distanceToMoveInSteps = signed distance to move relative to the current
@@ -1229,6 +1237,7 @@ bool ESP_FlexyStepper::processMovement(void)
     {
       emergencyStopActive = false;
     }
+  Serial.print("[estop]");
     return (true);
   }
 
@@ -1331,6 +1340,7 @@ bool ESP_FlexyStepper::processMovement(void)
       nextStepPeriod_InUS = periodOfSlowestStep_InUS;
       lastStepTime_InUS = micros();
       lastStepDirectionBeforeLimitSwitchTrigger = directionOfMotion;
+  Serial.print("[start+]");
       return (false);
     }
 
@@ -1342,6 +1352,7 @@ bool ESP_FlexyStepper::processMovement(void)
       nextStepPeriod_InUS = periodOfSlowestStep_InUS;
       lastStepTime_InUS = micros();
       lastStepDirectionBeforeLimitSwitchTrigger = directionOfMotion;
+  Serial.print("[start-]");
       return (false);
     }
     else
@@ -1362,7 +1373,8 @@ bool ESP_FlexyStepper::processMovement(void)
       {
         this->triggerBrakeIfNeededOrSetTimeout();
       }
-      return (true);
+Serial.print("[0dist]");
+        return (true);
     }
   }
 
@@ -1372,7 +1384,10 @@ bool ESP_FlexyStepper::processMovement(void)
   periodSinceLastStep_InUS = currentTime_InUS - lastStepTime_InUS;
   // if it is not time for the next step, return
   if (periodSinceLastStep_InUS < (unsigned long)nextStepPeriod_InUS)
+  {
+    Serial.print("[period]");
     return (false);
+  }
 
   // we have to move, so deactivate brake (if configured at all) immediately
   if (this->_isBrakeConfigured && this->_isBrakeActive)
@@ -1423,9 +1438,11 @@ bool ESP_FlexyStepper::processMovement(void)
           this->triggerBrakeIfNeededOrSetTimeout();
         }
       }
-      return (true);
+Serial.print("[reached]");
+        return (true);
     }
   }
+  Serial.print("[notreached]");
   return (false);
 }
 
